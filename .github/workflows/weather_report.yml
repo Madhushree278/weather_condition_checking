@@ -1,0 +1,72 @@
+name: Daily Weather Email Report (IST)
+
+on:
+  schedule:
+    # -------------------------------------------------------------------------
+    # CRON TIME CONVERSION FOR IST (Indian Standard Time = UTC + 5:30):
+    # Target IST Time minus 5h 30m = UTC Cron Expression
+    #
+    # Examples:
+    #   - 07:00 AM IST  -> '30 1 * * *' (01:30 UTC)
+    #   - 08:00 AM IST  -> '30 2 * * *' (02:30 UTC)
+    #   - 09:00 AM IST  -> '30 3 * * *' (03:30 UTC) [ACTIVE DEFAULT]
+    #   - 01:00 PM IST  -> '30 7 * * *' (07:30 UTC)
+    #   - 06:00 PM IST  -> '30 12 * * *' (12:30 UTC)
+    #   - 09:00 PM IST  -> '30 15 * * *' (15:30 UTC)
+    # -------------------------------------------------------------------------
+    - cron: '30 3 * * *' # Runs daily at 09:00 AM IST
+
+  # Allows manual triggering anytime from the GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      script_to_run:
+        description: 'Select weather script to run'
+        required: true
+        default: 'weather_email_simple.py'
+        type: choice
+        options:
+          - 'weather_email_simple.py (Palani, Tamil Nadu)'
+          - 'himalayan_weather_monitor.py (Manali, Himachal Pradesh)'
+          - 'both'
+
+jobs:
+  send-weather-report:
+    runs-on: ubuntu-latest
+
+    # Set timezone for the runner to IST
+    env:
+      TZ: 'Asia/Kolkata'
+      SMTP_EMAIL: ${{ secrets.SMTP_EMAIL }}
+      SMTP_APP_PASSWORD: ${{ secrets.SMTP_APP_PASSWORD }}
+      TO_EMAIL: ${{ secrets.TO_EMAIL }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests schedule
+
+      - name: Run Weather Report Script
+        run: |
+          CHOICE="${{ github.event.inputs.script_to_run }}"
+
+          if [[ "$CHOICE" == *"himalayan_weather_monitor"* ]]; then
+            echo "Running Himalayan weather monitor (Manali)..."
+            python himalayan_weather_monitor.py
+          elif [[ "$CHOICE" == "both" ]]; then
+            echo "Running Palani weather report..."
+            python weather_email_simple.py
+            echo "Running Himalayan weather report..."
+            python himalayan_weather_monitor.py
+          else
+            echo "Running Palani weather report..."
+            python weather_email_simple.py
+          fi
