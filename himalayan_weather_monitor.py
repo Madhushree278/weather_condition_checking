@@ -35,9 +35,9 @@ if os.path.exists(env_path):
                 key, val = line.split("=", 1)
                 os.environ.setdefault(key.strip(), val.strip())
 
-SENDER_EMAIL = os.getenv("SENDER_EMAIL") or os.getenv("SMTP_EMAIL") or "your_email@gmail.com"
-SENDER_PASSWORD = os.getenv("SENDER_PASSWORD") or os.getenv("SMTP_APP_PASSWORD") or "your_app_password"
-RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL") or os.getenv("TO_EMAIL") or "recipient@gmail.com"
+SENDER_EMAIL = (os.getenv("SENDER_EMAIL") or os.getenv("SMTP_EMAIL") or "").strip()
+SENDER_PASSWORD = (os.getenv("SENDER_PASSWORD") or os.getenv("SMTP_APP_PASSWORD") or "").strip().replace(" ", "")
+RECIPIENT_EMAIL = (os.getenv("RECIPIENT_EMAIL") or os.getenv("TO_EMAIL") or "").strip()
 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
@@ -268,8 +268,40 @@ def create_html_email(weather):
 # EMAIL SENDING
 # =====================================================================
 
+def mask_email(email: str) -> str:
+    if "@" in email:
+        name, domain = email.split("@", 1)
+        masked_name = name[:2] + "***" if len(name) > 2 else name + "***"
+        return f"{masked_name}@{domain}"
+    return "***"
+
+
 def send_email(subject, html_content):
     """Send an HTML email via Gmail SMTP using STARTTLS."""
+    placeholder_emails = {"", "your_email@gmail.com", "yourgmail@gmail.com", "recipient@gmail.com"}
+    placeholder_passwords = {"", "your_app_password", "your_16_digit_app_password"}
+
+    if SENDER_EMAIL in placeholder_emails or SENDER_PASSWORD in placeholder_passwords or not RECIPIENT_EMAIL:
+        print("\n" + "=" * 68)
+        print("ERROR: Gmail credentials are not configured!")
+        if os.getenv("GITHUB_ACTIONS"):
+            print("Running in GitHub Actions runner. Please set your Repository Secrets:")
+            print("  1. Go to https://github.com/Madhushree278/weather_condition_checking/settings/secrets/actions")
+            print("  2. Click 'New repository secret'")
+            print("  3. Add the following 3 secrets:")
+            print("       - Name: SMTP_EMAIL        Value: your sender Gmail (e.g. mylyrical226@gmail.com)")
+            print("       - Name: SMTP_APP_PASSWORD Value: your 16-character Gmail App Password")
+            print("       - Name: TO_EMAIL          Value: recipient address (e.g. madhushreemanikandan278@gmail.com)")
+        else:
+            print("Please create or verify your local .env file containing:")
+            print("  SMTP_EMAIL=your_email@gmail.com")
+            print("  SMTP_APP_PASSWORD=your_16_digit_app_password")
+            print("  TO_EMAIL=recipient@gmail.com")
+        print("=" * 68 + "\n")
+        return False
+
+    print(f"Connecting to Gmail SMTP as {mask_email(SENDER_EMAIL)} (password length: {len(SENDER_PASSWORD)} chars)...")
+
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
     message["From"] = SENDER_EMAIL
@@ -282,7 +314,7 @@ def send_email(subject, html_content):
             try:
                 server.login(SENDER_EMAIL, SENDER_PASSWORD)
             except smtplib.SMTPAuthenticationError:
-                print("Error: Gmail SMTP authentication failed. Check SENDER_EMAIL and the Gmail App Password.")
+                print(f"Error: Gmail SMTP authentication failed for '{mask_email(SENDER_EMAIL)}'. Check credentials or App Password.")
                 return False
             server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, message.as_string())
     except smtplib.SMTPException as exc:

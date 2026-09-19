@@ -45,9 +45,9 @@ if os.path.exists(env_path):
                 key, val = line.split("=", 1)
                 os.environ.setdefault(key.strip(), val.strip())
 
-SMTP_EMAIL = os.getenv("SMTP_EMAIL") or "your_email@gmail.com"
-SMTP_APP_PASSWORD = os.getenv("SMTP_APP_PASSWORD") or "your_app_password"
-TO_EMAIL = os.getenv("TO_EMAIL") or "recipient@gmail.com"
+SMTP_EMAIL = (os.getenv("SMTP_EMAIL") or "").strip()
+SMTP_APP_PASSWORD = (os.getenv("SMTP_APP_PASSWORD") or "").strip().replace(" ", "")
+TO_EMAIL = (os.getenv("TO_EMAIL") or "").strip()
 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587  # STARTTLS port
@@ -206,15 +206,41 @@ This is an automated weather report generated using Python.
 # STEP 3: SEND THE EMAIL VIA GMAIL SMTP
 # =============================================================================
 
+def mask_email(email: str) -> str:
+    if "@" in email:
+        name, domain = email.split("@", 1)
+        masked_name = name[:2] + "***" if len(name) > 2 else name + "***"
+        return f"{masked_name}@{domain}"
+    return "***"
+
+
 def send_email(body: str):
     """Connects to Gmail SMTP (smtp.gmail.com:587) using STARTTLS and
     sends the weather report email. The App Password is never printed."""
 
-    if SMTP_EMAIL == "yourgmail@gmail.com" or SMTP_APP_PASSWORD == "your_16_digit_app_password":
-        print("ERROR: Please edit the SMTP CONFIGURATION section at the top of this")
-        print("script and replace SMTP_EMAIL, SMTP_APP_PASSWORD, and TO_EMAIL with")
-        print("your real values before running.")
+    placeholder_emails = {"", "your_email@gmail.com", "yourgmail@gmail.com", "recipient@gmail.com"}
+    placeholder_passwords = {"", "your_app_password", "your_16_digit_app_password"}
+
+    if SMTP_EMAIL in placeholder_emails or SMTP_APP_PASSWORD in placeholder_passwords or not TO_EMAIL:
+        print("\n" + "=" * 68)
+        print("ERROR: Gmail credentials are not configured!")
+        if os.getenv("GITHUB_ACTIONS"):
+            print("Running in GitHub Actions runner. Please set your Repository Secrets:")
+            print("  1. Go to https://github.com/Madhushree278/weather_condition_checking/settings/secrets/actions")
+            print("  2. Click 'New repository secret'")
+            print("  3. Add the following 3 secrets:")
+            print("       - Name: SMTP_EMAIL        Value: your sender Gmail (e.g. mylyrical226@gmail.com)")
+            print("       - Name: SMTP_APP_PASSWORD Value: your 16-character Gmail App Password")
+            print("       - Name: TO_EMAIL          Value: recipient address (e.g. madhushreemanikandan278@gmail.com)")
+        else:
+            print("Please create or verify your local .env file containing:")
+            print("  SMTP_EMAIL=your_email@gmail.com")
+            print("  SMTP_APP_PASSWORD=your_16_digit_app_password")
+            print("  TO_EMAIL=recipient@gmail.com")
+        print("=" * 68 + "\n")
         sys.exit(1)
+
+    print(f"Connecting to Gmail SMTP as {mask_email(SMTP_EMAIL)} (password length: {len(SMTP_APP_PASSWORD)} chars)...")
 
     message = MIMEText(body, "plain", "utf-8")
     message["Subject"] = "Current Weather Update - Palani"
@@ -227,8 +253,11 @@ def send_email(body: str):
             server.login(SMTP_EMAIL, SMTP_APP_PASSWORD)
             server.sendmail(SMTP_EMAIL, TO_EMAIL, message.as_string())
     except smtplib.SMTPAuthenticationError:
-        # Note: we deliberately do not print SMTP_APP_PASSWORD anywhere.
-        print("ERROR: SMTP authentication failed. Check your Gmail address and App Password.")
+        print(f"ERROR: SMTP authentication failed for account '{mask_email(SMTP_EMAIL)}'.")
+        print("Please check:")
+        print("  1. Is 2-Step Verification enabled on this Google Account?")
+        print("  2. Did you use an App Password (not your regular Gmail password)?")
+        print("  3. Has the App Password been revoked or copied with extra characters?")
         sys.exit(1)
     except smtplib.SMTPConnectError:
         print("ERROR: Could not connect to Gmail's SMTP server.")
